@@ -1,13 +1,10 @@
 #pragma once
 
 // setup() in src/main.cpp builds the widgets once; the setters below update
-// those same saved widget pointers while music and clock code keep running.
+// those same saved widget pointers while music code keeps running.
 // Widget callbacks call music_controller.cpp/audio_player.cpp for actions;
 // this header intentionally exposes screen changes, not hardware internals.
 void display_ui_create(void);
-
-// clock_manager_update() in src/clock_manager.cpp calls this twice a second.
-void display_ui_set_time(const char *time_text, const char *date_text);
 
 // Playback startup/end and pause taps all report what is happening through this.
 void display_ui_set_status(const char *text);

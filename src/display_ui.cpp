@@ -6,15 +6,15 @@
 // UI LAYER ORDER
 // --------------
 // LVGL objects created later sit visually above objects created earlier:
-//   background image -> visualizer bars -> status/header -> transport controls
+//   background image -> live visualizer -> status/header -> transport controls
 //   -> slide-up drawer.
-// The background and bars still set LV_OBJ_FLAG_EVENT_BUBBLE so a swipe that
+// The background and marker still set LV_OBJ_FLAG_EVENT_BUBBLE so a swipe that
 // begins on visible content reaches the screen gesture handler underneath.
 //
 // Rendering warning for this project: every changed LVGL object eventually
 // becomes SPI pixel traffic in my_disp_flush() in main.cpp. Moving large
 // transparent panels constantly is expensive, so audio has its own task and
-// the visualizer bars are currently resting art rather than a redraw-heavy FFT.
+// the live visualizer updates only a tiny fixed group of bar objects.
 
 #include <lvgl.h>
 #include <stdint.h>
@@ -38,8 +38,6 @@ enum MusicView
     VIEW_COUNT
 };
 
-static lv_obj_t *time_label = nullptr;
-static lv_obj_t *date_label = nullptr;
 static lv_obj_t *lockscreen_background = nullptr;
 static lv_obj_t *wallpaper_message_label = nullptr;
 // These live on the home/lock screen now. main.cpp updates song/status, and
@@ -101,20 +99,6 @@ static void gesture_event_cb(lv_event_t *event)
     {
         drawer_open = false;
         animate_drawer_to(DRAWER_CLOSED_Y);
-    }
-}
-
-void display_ui_set_time(const char *time_text, const char *date_text)
-{
-    // clock_manager_update() in src/clock_manager.cpp prepares these strings from the
-    // board's RTC; this function only knows how to put them on the labels.
-    if (time_label)
-    {
-        lv_label_set_text(time_label, time_text);
-    }
-    if (date_label)
-    {
-        lv_label_set_text(date_label, date_text);
     }
 }
 
@@ -182,8 +166,7 @@ static void apply_wallpaper_accent_colors(void)
         lv_obj_set_style_bg_color(swipe_handle, lv_color_hex(wallpaper_accents.secondary), LV_PART_MAIN);
     }
 
-    // The visualizer owns its bar objects, so ask that module to repaint
-    // itself instead of reaching into its private bar pointer array here.
+    // The visualizer owns its bars, so ask it to repaint with these accents.
     visualizer_apply_accent_colors();
     show_music_view(active_view);
 }
@@ -529,8 +512,8 @@ void display_ui_create(void)
     lv_obj_add_flag(lockscreen_background, LV_OBJ_FLAG_EVENT_BUBBLE);
 
     // This stage lives above the wallpaper but below the controls. Follow into
-    // visualizer.cpp: its resting bars use the same editable accents as the
-    // progress indicator and pause button, ready for live audio levels later.
+    // visualizer.cpp: tiny live bars consume background FFT levels without
+    // making the display own any audio work.
     visualizer_create(lv_scr_act());
 
     // Hidden unless wallpaper loading fails. This is intentionally on-screen
@@ -544,8 +527,8 @@ void display_ui_create(void)
     lv_obj_add_flag(wallpaper_message_label, LV_OBJ_FLAG_HIDDEN);
 
     // A shallow translucent header keeps text readable but leaves most of
-    // the wallpaper visible. The open middle is saved for visualizer.cpp once
-    // it starts producing real bars instead of putting fake album art there.
+    // the wallpaper visible. The open middle is saved for the compact live
+    // bass-to-treble visualizer.
     lv_obj_t *now_playing_header = lv_obj_create(lv_scr_act());
     lv_obj_set_size(now_playing_header, SCREEN_WIDTH, 105);
     lv_obj_set_pos(now_playing_header, 0, 0);
@@ -557,23 +540,18 @@ void display_ui_create(void)
     lv_obj_set_style_bg_color(now_playing_header, lv_color_hex(0x05080E), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(now_playing_header, LV_OPA_60, LV_PART_MAIN);
 
-    date_label = lv_label_create(now_playing_header);
-    lv_label_set_text(date_label, "MAY 24");
-    lv_obj_set_style_text_color(date_label, lv_color_hex(0xD7E0EA), LV_PART_MAIN);
-    lv_obj_set_style_text_font(date_label, &lv_font_montserrat_12, LV_PART_MAIN);
-    lv_obj_align(date_label, LV_ALIGN_TOP_LEFT, 12, 10);
+    lv_obj_t *title_label = lv_label_create(now_playing_header);
+    lv_label_set_text(title_label, "sahana's muzic player");
+    lv_obj_set_style_text_color(title_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(title_label, &lv_font_montserrat_16, LV_PART_MAIN);
+    lv_obj_align(title_label, LV_ALIGN_TOP_MID, 0, 8);
 
-    time_label = lv_label_create(now_playing_header);
-    lv_label_set_text(time_label, "--:--");
-    lv_obj_set_style_text_color(time_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-    lv_obj_set_style_text_font(time_label, &lv_font_montserrat_16, LV_PART_MAIN);
-    lv_obj_align(time_label, LV_ALIGN_TOP_RIGHT, -12, 8);
-
-    // The top of the new player resembles the old music-player layout:
-    // small system info, song text, then exactly one real playback progress bar.
+    // A fixed title avoids periodic clock redraws while playback is busy.
     song_label = lv_label_create(now_playing_header);
     lv_label_set_text(song_label, "/music");
-    lv_label_set_long_mode(song_label, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    // Sacrifice marquee motion for responsiveness: a long filename is clipped
+    // with dots instead of constantly invalidating header pixels during audio.
+    lv_label_set_long_mode(song_label, LV_LABEL_LONG_DOT);
     lv_obj_set_width(song_label, 250);
     lv_obj_set_style_text_align(song_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_style_text_color(song_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);

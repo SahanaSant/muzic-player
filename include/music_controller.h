@@ -5,8 +5,8 @@
 // It loads/caches wallpaper before opening a WAV to avoid SD card contention.
 void music_controller_start(void);
 
-// loop() in src/main.cpp calls this to report playback progress/status.
-// Actual sample streaming continues independently inside audio_player.cpp.
+// loop() in src/main.cpp calls this for progress/status and lightweight
+// visualizer animation. Audio streaming and FFT work remain on worker tasks.
 void music_controller_update(void);
 
 // Previous/next buttons created in display_ui.cpp call these; this module owns

@@ -33,6 +33,7 @@
 #include "../_official_3p5_demo/Arduino/libraries/es8311/es8311.h"
 #include "../_official_3p5_demo/Arduino/libraries/es8311/es8311.cpp"
 #include "audio_player.h"
+#include "spectrum_analyzer.h"
 
 #define I2S_MCLK 12
 #define I2S_BCLK 13
@@ -41,6 +42,17 @@
 
 #define AUDIO_MCLK_MULTIPLE 256
 #define AUDIO_START_VOLUME 70
+
+// DMA TUNING MAP
+// --------------
+// More queued frames make audio harder to interrupt, but also mean more sound
+// is already "in flight" when pause is pressed and when a visualizer responds.
+// At 44.1 kHz, one 512-frame block lasts about 11.6 ms; twelve blocks can hold
+// about 139 ms. Keep these names visible for hardware testing: if touch/audio
+// is stable, AUDIO_DMA_BUFFER_COUNT is the first latency knob to try at 8,
+// then 6, listening carefully for clicks during swipes and drawer movement.
+static constexpr int AUDIO_DMA_BUFFER_COUNT = 12;
+static constexpr int AUDIO_DMA_FRAMES_PER_BUFFER = 512;
 
 // How this module links to the screen:
 // music_controller_start() calls audio_player_start_wav().
@@ -266,7 +278,8 @@ static bool init_audio_codec(uint32_t sample_rate)
 
     // I2S is the audio "conveyor belt" from the ESP32 to the ES8311.
     // DMA buffers let hardware keep pushing sound while our task reads the next
-    // SD chunk. Twelve buffers give swipes/view redraws extra audio cushion.
+    // SD chunk. These named tuning constants keep the sound-versus-latency
+    // tradeoff measurable rather than burying it as magic numbers here.
     const i2s_config_t i2s_config = {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
         .sample_rate = sample_rate,
@@ -274,11 +287,11 @@ static bool init_audio_codec(uint32_t sample_rate)
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-        // 12 blocks x 512 sample slots is deliberate cushioning. The LCD can
+        // Twelve blocks x 512 sample frames is deliberate cushioning. The LCD can
         // have bursts of expensive SPI drawing during gestures; these queued
         // samples keep leaving the speaker smoothly during that burst.
-        .dma_buf_count = 12,
-        .dma_buf_len = 512,
+        .dma_buf_count = AUDIO_DMA_BUFFER_COUNT,
+        .dma_buf_len = AUDIO_DMA_FRAMES_PER_BUFFER,
         // APLL gives the audio clock a steadier frequency. Auto-clear emits
         // silence instead of replaying stale garbage if DMA ever under-runs.
         .use_apll = true,
@@ -373,6 +386,7 @@ bool audio_player_start_wav(const String &path)
     // Jump past the WAV header/chunks so the next read starts on real audio sample bytes.
     wav_file.seek(current_wav.data_offset);
     bytes_played = 0;
+    spectrum_analyzer_reset();
 
     if (!audio_task_handle)
     {
@@ -391,6 +405,10 @@ bool audio_player_start_wav(const String &path)
             return false;
         }
     }
+
+    // The analyzer is optional display data; audio still starts if its worker
+    // cannot be created. It remains lower priority than this DMA-feeding task.
+    spectrum_analyzer_begin();
 
     audio_playing = true;
     audio_paused = false;
@@ -416,6 +434,7 @@ static void stop_audio_output(const char *screen_status)
     {
         wav_file.close();
     }
+    spectrum_analyzer_reset();
 
     // Next linked step: music_controller_update() reads this message and
     // forwards it to display_ui_set_status() on the touchscreen.
@@ -480,6 +499,8 @@ static void stream_audio_chunk(void)
     // Stereo WAV data is already left/right/left/right, so we can send it as-is.
     const void *write_buffer = file_buffer;
     size_t write_bytes = bytes_read;
+    uint16_t analysis_channels = current_wav.channels;
+    uint32_t analysis_sample_rate = current_wav.sample_rate;
 
     if (current_wav.channels == 1)
     {
@@ -504,6 +525,12 @@ static void stream_audio_chunk(void)
     size_t bytes_written = 0;
     i2s_write(I2S_NUM_0, write_buffer, write_bytes, &bytes_written, portMAX_DELAY);
     xSemaphoreGive(audio_mutex);
+
+    // Only after DMA accepts this sound block do we copy an occasional mono
+    // snapshot for lower-priority FFT work. UI/analysis never delays stocking
+    // the audio buffers that prevent underruns.
+    spectrum_analyzer_submit_pcm(file_buffer, bytes_read, analysis_channels,
+                                 analysis_sample_rate);
 }
 
 bool audio_player_toggle_pause(void)
@@ -515,6 +542,10 @@ bool audio_player_toggle_pause(void)
     }
 
     audio_paused = !audio_paused;
+    if (audio_paused)
+    {
+        spectrum_analyzer_reset();
+    }
     // A tiny chunk may already be on its way to the speaker when pause is tapped.
     // Let it finish instead of wiping queued samples and accidentally skipping audio.
     return true;

@@ -10,6 +10,7 @@
 #include "file_browser.h"
 #include "music_controller.h"
 #include "sd_manager.h"
+#include "visualizer.h"
 
 static size_t current_song_index = 1;
 static bool music_folder_ready = false;
@@ -134,8 +135,11 @@ bool music_controller_next_song(void)
 void music_controller_update(void)
 {
     // Playback itself now runs in audio_stream_task() inside audio_player.cpp.
-    // This UI-side update just carries completion/failure words onto the screen,
-    // so swiping and changing views cannot be responsible for feeding the speaker.
+    // This UI-side update carries completion/failure words onto the screen and
+    // asks visualizer.cpp to animate already-published FFT levels. It never
+    // feeds the speaker or performs FFT work itself.
+    visualizer_update();
+
     static uint32_t last_progress_update_ms = 0;
     if (millis() - last_progress_update_ms >= 200)
     {

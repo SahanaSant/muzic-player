@@ -11,13 +11,12 @@
 #include <lvgl.h>
 #include "TCA9554.h"
 #include "TouchDrvFT6X36.hpp"
-#include "clock_manager.h"
 #include "display_ui.h"
 #include "music_controller.h"
 
 // main.cpp stays on hardware wiring and scheduling. Follow the feature code to:
-// clock_manager.cpp for RTC/time, music_controller.cpp for SD + song startup,
-// display_ui.cpp for widgets, and audio_player.cpp for actual sound bytes.
+// music_controller.cpp for SD + song startup, display_ui.cpp for widgets,
+// and audio_player.cpp for actual sound bytes.
 //
 // A useful way to picture this app:
 //   setup() = plug every physical subsystem in and build the first screen once.
@@ -100,7 +99,7 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
 {
     // LVGL gives us exactly the rectangular region that changed. Sending only
     // that rectangle is much cheaper than redrawing all 320 x 480 pixels for
-    // every moving progress bar or clock update.
+    // every moving progress or visual element.
     uint32_t w = area->x2 - area->x1 + 1;
     uint32_t h = area->y2 - area->y1 + 1;
     gfx->draw16bitRGBBitmap(area->x1, area->y1, (uint16_t *)&color_p->full, w, h);
@@ -142,11 +141,8 @@ void my_touchpad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
 // ============================================================================
 void setup(void)
 {
-    // I2C is the shared slow control bus: touch, GPIO expander, audio codec,
-    // and RTC can all receive small configuration messages over these wires.
+    // I2C is the shared slow control bus for touch, GPIO expander, and codec.
     Wire.begin(I2C_SDA, I2C_SCL);
-    // Next linked module: clock_manager.cpp owns the RTC after I2C is ready.
-    clock_manager_init();
 
     TCA.begin();
     TCA.pinMode1(1, OUTPUT);
@@ -208,7 +204,6 @@ void setup(void)
     // Create labels/buttons before music_controller_start() writes SD/song
     // status into them. See display_ui_create() for the visible layout.
     display_ui_create();
-    clock_manager_update();
     // Important order: music_controller_start() may decode/copy wallpaper
     // pixels from SD. It does that now, before audio_player.cpp starts the WAV
     // streaming task, so loading art cannot cause song clicks.
@@ -221,9 +216,8 @@ void setup(void)
 // ============================================================================
 void loop(void)
 {
-    // Both managers update existing UI widgets built in setup(). Follow these
-    // into their .cpp files for time formatting and streamed music playback.
-    clock_manager_update();
+    // Carry playback state onto existing UI widgets; audio feeding stays in
+    // its dedicated task.
     music_controller_update();
 
     // LVGL runs touchscreen callbacks here. For example, tapping pause jumps

@@ -14,8 +14,8 @@ hardware/performance fixes are necessary.
 
 - Wallpaper loaded from the SD card's `/images` folder.
 - Automatic cool-toned accents picked from dominant PNG wallpaper colors.
-- A compact now-playing screen with date, time, song path, and progress.
-- Center-stage colored visualizer bars as a placeholder for future live bars.
+- A compact now-playing screen with a player title, song path, and progress.
+- A lightweight live FFT visualizer styled as a themed voice-recording wave.
 - Previous, pause/play, and next touch controls.
 - A volume slider connected to the ES8311 audio codec.
 - Slide-up music drawer with `Playlists` and `Songs` views.
@@ -65,13 +65,12 @@ has MP3-player styling.
 The startup order is intentional:
 
 1. [main.cpp](src/main.cpp) starts I2C, display hardware, touch, and LVGL.
-2. [clock_manager.cpp](src/clock_manager.cpp) starts the RTC.
-3. [display_ui.cpp](src/display_ui.cpp) creates visible widgets.
-4. [music_controller.cpp](src/music_controller.cpp) mounts the SD card.
-5. [file_browser.cpp](src/file_browser.cpp) finds the wallpaper.
-6. The wallpaper is decoded, sampled for colors, drawn, and cached.
-7. Only after the image work is done does the controller open a WAV.
-8. [audio_player.cpp](src/audio_player.cpp) starts independent audio streaming.
+2. [display_ui.cpp](src/display_ui.cpp) creates visible widgets.
+3. [music_controller.cpp](src/music_controller.cpp) mounts the SD card.
+4. [file_browser.cpp](src/file_browser.cpp) finds the wallpaper.
+5. The wallpaper is decoded, sampled for colors, drawn, and cached.
+6. Only after the image work is done does the controller open a WAV.
+7. [audio_player.cpp](src/audio_player.cpp) starts independent audio streaming.
 
 The wallpaper is handled before audio because the PNG and WAV live on the same
 SD card. Heavy PNG decoding while music streams was causing clicks and
@@ -127,10 +126,20 @@ Owns timing-sensitive sound details:
 - I2S configuration.
 - DMA queue feeding.
 - FreeRTOS audio-streaming task.
+- Post-DMA PCM handoff for optional background analysis.
 - Pause state and playback progress.
 - Safe track replacement using a mutex.
 
 This is the key file for understanding how actual sound reaches the speaker.
+
+### `src/spectrum_analyzer.cpp`
+
+Owns the efficient background sound analysis:
+
+- Lower-priority queued 1024-point FFT analysis, after DMA has accepted audio.
+- Hann windowing and cached FFT twiddle steps.
+- Thirteen lightweight `0..100` bass-to-treble levels for the live visualizer.
+- Reset-on-pause/track-change behavior so the animation can settle immediately.
 
 ### `src/sd_manager.cpp`
 
@@ -142,15 +151,6 @@ Audio can open `/music/song.wav` using SD_MMC, while LVGL asks for
 
 Searches the SD card for WAV paths and wallpaper paths. It returns names only;
 it does not draw or play anything.
-
-### `src/clock_manager.cpp`
-
-Owns the PCF85063 RTC and formats date/time for the header. When a newly
-flashed firmware sees an RTC behind its build time, it corrects the stale
-clock from the computer-local build time. Normal restarts then leave the RTC
-running naturally.
-
-This is not internet/NTP time. True always-current time would need Wi-Fi sync.
 
 ### `src/accent_colors.cpp`
 
@@ -166,9 +166,14 @@ accents, because those colors looked out of place on this interface.
 
 ### `src/visualizer.cpp`
 
-Currently creates resting colored bars in the open center space. They use the
-automatic palette, but are not driven by audio signal yet. Future live motion
-should be rate-limited so aggressive redraws do not bring audio glitches back.
+Creates twenty-nine skinny centered recording-style pills in the open center space.
+Every pill is a mirrored palette gradient: `primary` begins at the equilibrium
+line and blends to `highlight` at both moving tips. The thirteen efficient FFT
+bands remain the real audio data; extra pills interpolate between adjacent
+bands for a denser wave without heavier analysis. The display refreshes up to
+thirty times per second, with small fixed per-pill response differences to
+keep motion lively while preserving the real FFT shape. The maximum centered
+amplitude is stretched for more dramatic peaks without adding more FFT work.
 
 ### `include/lv_conf.h`
 
@@ -210,7 +215,11 @@ hardware steadily sends them through I2S even if the CPU is briefly busy with
 the screen. This project uses a deeper DMA queue to survive short redraw bursts.
 
 DMA handles bumps, not unlimited delays. The separate audio task is what keeps
-the queue refilled.
+the queue refilled. Spectrum work now receives an occasional copied sample
+frame only after I2S has accepted the audio chunk; its FFT task runs at lower
+priority than streaming and keeps only the latest queued frame. The Hann window
+and FFT twiddle steps are prepared once so steady-state analysis avoids repeated
+trigonometry and unnecessary square-root work.
 
 ## Why Removing The SD Card Caused Ticking
 
@@ -272,6 +281,8 @@ codec adjusts output gain, so the ESP32 does not need to rewrite every sample.
 
 The audio task counts played WAV bytes. The screen turns that into one progress
 bar, updating at a restrained rate to avoid needless screen work during music.
+Long song paths are clipped with dots instead of constantly scrolling, leaving
+the animation budget for touch feedback and the compact live visualizer.
 
 ## Fonts
 
@@ -305,21 +316,16 @@ Export the audio as uncompressed 16-bit PCM WAV.
 
 ### Audio clicks during interaction
 
-The audio task and DMA changes fix the major cause. If a later animated
-visualizer reintroduces it, reduce redraw rate/area before adding complexity.
-
-### Time is wrong
-
-Flashing a new build corrects an RTC that is behind the local firmware build
-time. Exact always-current time requires a future Wi-Fi/NTP feature.
+The audio task and DMA changes fix the major cause. The live visualizer remains
+limited to a narrow bar region while using up to thirty animation updates per
+second; if motion is tuned later, keep the redraw area conservative.
 
 ## Good Next Features
 
-- Live audio-level visualizer with a low fixed refresh rate.
+- Tune the live visualizer shape and palette on hardware.
 - Alphabetically sorted songs.
 - Song display names without the `/music/` prefix.
 - Persisted volume across power cycles.
-- Wi-Fi/NTP time synchronization.
 - Elapsed and remaining duration labels.
 
 ## Reading Order
@@ -332,8 +338,7 @@ src/main.cpp
   -> src/file_browser.cpp and src/sd_manager.cpp
   -> src/display_ui.cpp
   -> src/accent_colors.cpp and src/visualizer.cpp
-  -> src/audio_player.cpp
-  -> src/clock_manager.cpp
+  -> src/audio_player.cpp and src/spectrum_analyzer.cpp
 ```
 
 That follows the board from startup, to files, to UI, to actual sound output.

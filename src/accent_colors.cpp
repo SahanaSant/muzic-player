@@ -1,6 +1,6 @@
 // ============================================================================
 // accent_colors.cpp
-//  Colours sampled from the current wallpaper, shared by controls and bars
+//  Colours sampled from the current wallpaper, shared by controls and waveform
 // ============================================================================
 //
 // Why sample once at startup?
@@ -203,5 +203,5 @@ void accent_colors_extract_from_rgb565_alpha(const uint8_t *pixels, uint32_t pix
                                       : cool_companion_from(primary, 72);
     wallpaper_accents.muted = soften_colour(primary, 38, 8);
     // Next linked step: display_ui.cpp reads these four fields in
-    // apply_wallpaper_accent_colors(), then asks visualizer.cpp to repaint bars.
+    // apply_wallpaper_accent_colors(), then asks visualizer.cpp to repaint.
 }
