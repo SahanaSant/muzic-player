@@ -1,7 +1,5 @@
 # Waveshare ESP32-S3 Music Player
 
-this is where i do my dirty work hahahaha
-
 This project is a touchscreen music player for the
 Waveshare ESP32-S3-Touch-LCD-3.5 board. It plays uncompressed WAV files from
 the built-in SD card slot, shows an SD-card wallpaper, creates matching accent
