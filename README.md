@@ -190,7 +190,9 @@ Holds LVGL configuration. Key settings for this app:
 - PNG/BMP/JPG support is enabled.
 - Only needed Montserrat font sizes are enabled.
 
-## Why Touching The Screen Corrupted Audio
+## Theory and Troubleshooting
+
+### Why Touching The Screen Corrupted Audio
 
 Initially, audio was fed from the regular Arduino `loop()`, the same loop
 responsible for LVGL animations and display drawing. Swiping the drawer makes
@@ -204,7 +206,7 @@ The fix was moving WAV streaming into a dedicated FreeRTOS task inside
 `audio_player.cpp`. Now the display can be busy while audio continues feeding
 I2S independently.
 
-## I2S And DMA In Normal Words
+### I2S And DMA In Normal Words
 
 A PCM WAV file is a sequence of sample numbers. Those values must reach the
 ES8311 codec with consistent timing.
@@ -227,7 +229,7 @@ priority than streaming and keeps only the latest queued frame. The Hann window
 and FFT twiddle steps are prepared once so steady-state analysis avoids repeated
 trigonometry and unnecessary square-root work.
 
-## Why Removing The SD Card Caused Ticking
+### Why Removing The SD Card Caused Ticking
 
 If the SD card disappears during playback, the next read cannot obtain fresh
 samples. Previously, a small stale audio fragment could remain in output and
@@ -254,7 +256,7 @@ The current approach is:
 Normal redraws should then reuse cached wallpaper pixels rather than decoding
 the PNG repeatedly during playback.
 
-## Why Swiping Was Not Working
+### Why Swiping Was Not Working
 
 The background covers the full screen. In LVGL, a top visual object can catch
 the gesture before the screen-level handler sees it.
@@ -262,7 +264,7 @@ the gesture before the screen-level handler sees it.
 The wallpaper and visualizer objects now bubble gestures. A swipe that begins
 on the image or on a bar still reaches the drawer gesture callback.
 
-## Previous, Next, And Safe Song Switching
+### Previous, Next, And Safe Song Switching
 
 The audio task may be reading the current WAV when a touch event asks for the
 next file. Closing a file while another task reads it is unsafe.
@@ -280,7 +282,7 @@ Song changes now use a mutex:
 
 Volume stays at the listener's selected level across track changes.
 
-## Volume And Progress
+### Volume And Progress
 
 The volume slider sends a `0..100` value directly to the ES8311 codec. The
 codec adjusts output gain, so the ESP32 does not need to rewrite every sample.
@@ -290,12 +292,10 @@ bar, updating at a restrained rate to avoid needless screen work during music.
 Long song paths are clipped with dots instead of constantly scrolling, leaving
 the animation budget for touch feedback and the compact live visualizer.
 
-## Fonts
+### Fonts
 
 The UI currently uses built-in Montserrat sizes enabled in
 `include/lv_conf.h`: 12, 14, 16, and 48. Enabling more fonts costs flash.
-
-## Troubleshooting
 
 ### `SD card mount failed`
 
