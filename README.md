@@ -1,4 +1,4 @@
-# Waveshare ESP32-S3 Music Player
+# Lossless Handlheld Music Playewr + Visualizer
 
 This project is a touchscreen music player for the
 Waveshare ESP32-S3-Touch-LCD-3.5 board. It plays uncompressed WAV files from
