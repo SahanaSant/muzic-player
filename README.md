@@ -8,6 +8,14 @@ colors from that wallpaper, and provides touch controls.
 This guide explains both how the app is organized and why several of the
 hardware/performance fixes are necessary.
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/2d90c297-28cc-4270-8967-0ea1d9b21680" width="45%">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="https://github.com/user-attachments/assets/dcebfcde-111c-45c9-835b-b87aeed3e8c1" width="45%">
+</p>
+
+
+
 ## What Works Right Now
 
 - Wallpaper loaded from the SD card's `/images` folder.
