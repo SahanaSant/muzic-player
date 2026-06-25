@@ -68,6 +68,12 @@ has MP3-player styling.
 
 ## Boot Flow
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/3107ab1a-7591-4024-af52-958efd014236" width="100%" />
+  <img src="https://github.com/user-attachments/assets/06a32479-c48b-4580-a3e9-53150665f398" width="100%">
+</p>
+
+
 The startup order is intentional:
 
 1. [main.cpp](src/main.cpp) starts I2C, display hardware, touch, and LVGL.
