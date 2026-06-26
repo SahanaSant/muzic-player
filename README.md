@@ -29,6 +29,12 @@ hardware/performance fixes are necessary.
 - On-screen status reporting instead of requiring Serial Monitor.
 - Protection against repeated ticking if the SD card disappears while playing.
 
+## Diagrams and Overview
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/3107ab1a-7591-4024-af52-958efd014236" width="100%" />
+  <img src="https://github.com/user-attachments/assets/06a32479-c48b-4580-a3e9-53150665f398" width="100%">
+</p>
+
 ## SD Card Layout
 
 Use folders like this:
@@ -67,12 +73,6 @@ MP3 is not played by the custom playback path yet, even though the interface
 has MP3-player styling.
 
 ## Boot Flow
-
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/3107ab1a-7591-4024-af52-958efd014236" width="100%" />
-  <img src="https://github.com/user-attachments/assets/06a32479-c48b-4580-a3e9-53150665f398" width="100%">
-</p>
-
 
 The startup order is intentional:
 
